@@ -242,23 +242,7 @@ func TestDiscoverySubscribe(t *testing.T) {
 		cbAddrs = addrs
 		return cbErr
 	}
-
-	// Do a subscribe
-	if err := d.SubscribeServiceAddresses(ctx, "example.com", cb); err != nil {
-		t.Fatalf("Error doing initial subscribe: %v", err)
-	}
-
-	// wait a second, ensure that we got another
-	select {
-	case <-cbCh:
-	case <-time.After(time.Second * 2):
-		t.Fatalf("CB failed")
-	}
-
-	// set an error, ensure that we get some more retires
-	cbErr = fmt.Errorf("some error")
-	prevAddrs := cbAddrs
-	for i := 0; i < 3; i++ {
+	cbWait := func() {
 		select {
 		case <-cbCh:
 		case <-time.After(time.Second * 2):
@@ -266,15 +250,40 @@ func TestDiscoverySubscribe(t *testing.T) {
 		}
 	}
 
+	// Do a subscribe
+	if err := d.SubscribeServiceAddresses(ctx, "example.com", cb); err != nil {
+		t.Fatalf("Error doing initial subscribe: %v", err)
+	}
+
+	// wait a second, ensure that we got another
+	cbWait()
+
+	// set an error, ensure that we get some more retires
+	cbErr = fmt.Errorf("some error")
+	prevAddrs := cbAddrs
+	for i := 0; i < 3; i++ {
+		cbWait()
+	}
+
 	// Clear error ensure that we get an update
 	cbErr = nil
-	select {
-	case <-cbCh:
-	case <-time.After(time.Second * 2):
-		t.Fatalf("CB failed")
-	}
+	cbWait()
 
 	if cbAddrs.Equal(prevAddrs) {
 		t.Fatalf("no update!")
+	}
+
+	// test that an update is seen immediately
+	prevAddrs = cbAddrs
+	cbWait()
+	// Update immediately
+	zones["example.com."] = "example.com. 1 IN A 1.2.3.4\nexample.com. 1 IN A 1.2.3.5"
+
+	// Wait, and see if we get updates
+	for i := 0; i < 3; i++ {
+		cbWait()
+		if len(prevAddrs) == len(cbAddrs) {
+			t.Fatalf("%d callback missing update!", i)
+		}
 	}
 }
