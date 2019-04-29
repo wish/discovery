@@ -301,7 +301,7 @@ func (d *discovery) backgroundCallback(ctx context.Context, q string, cb Callbac
 				// If there was a change, we execute the callback
 				if !results.Equal(newResults) {
 					// If we get an error applying the callback, we'll continue retrying
-					if err := cb(ctx, results); err != nil {
+					if err := cb(ctx, newResults); err != nil {
 						logrus.Errorf("Error in ServiceAddress callback, retrying: %v", err)
 						timer.Reset(d.c.SubscribeRetryInterval)
 						continue
